@@ -50,18 +50,24 @@ async def configure_webhook(bot, webhook_url):
 
 
 def extract_amount_from_receipt(image_path, user_id):
-    text = pytesseract.image_to_string(Image.open(image_path), lang='eng')
+    try:
+        text = pytesseract.image_to_string(Image.open(image_path), lang='eng')
+        print(f"Texto extraído: {text}")
 
-    # regex importe
-    match = re.search(r'\$\s?([\d.,]+)', text)
-    if match:
-        # Replace commas with periods and convert to float
-        amount = float(match.group(1).replace('.', '').replace(',', '.'))
-        # Restar el importe si es del usuario que resta
-        if user_id == USER_ID_RESTA:
-            amount = -abs(amount)
-        return amount
-    else:
+        # regex importe
+        match = re.search(r'\$\s?([\d.,]+)', text)
+        if match:
+            # Replace commas with periods and convert to float
+            amount = float(match.group(1).replace('.', '').replace(',', '.'))
+            # Restar el importe si es del usuario que resta
+            if user_id == USER_ID_RESTA:
+                amount = -abs(amount)
+            return amount
+        else:
+            print("No se encontró un importe válido en el texto.")
+            return None
+    except Exception as e:
+        print(f"Error procesando la imagen: {e}")
         return None
 
 # Función texto
@@ -100,21 +106,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global saldo
     user_id = update.effective_user.id
-    photo = update.message.photo[-1]
-    file = await photo.get_file()
 
-    # Usar un directorio temporal adecuado
     try:
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
+
+        # Usar un directorio temporal adecuado
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
             image_path = temp_file.name
             await file.download_to_drive(image_path)
 
+        print(f"Imagen descargada en: {image_path}")
+
         amount = extract_amount_from_receipt(image_path, user_id)
+    except Exception as e:
+        print(f"Error manejando la imagen: {e}")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Ha ocurrido un error al procesar la imagen, intenta de nuevo más tarde."
+        )
+        return
     finally:
-        if os.path.exists(image_path):
+        if 'image_path' in locals() and os.path.exists(image_path):
             os.remove(image_path)
 
-    if amount:
+    if amount is not None:
         saldo += amount
         saldo_mostrar = f"{saldo:,.2f}".replace(
             ',', 'X').replace('.', ',').replace('X', '.')
