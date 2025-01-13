@@ -13,7 +13,7 @@ pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tessera
 saldo = 0
 
 # ID user que acredita pagos
-USER_ID_RESTA = USERESTA
+USER_ID_RESTA = useresta
 
 # Conversion Tess
 
