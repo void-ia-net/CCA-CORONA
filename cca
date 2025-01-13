@@ -28,6 +28,9 @@ if not WEBHOOK_URL or not WEBHOOK_URL.startswith("https://"):
 if not PORT:
     raise ValueError("Falta configurar el puerto en 'PORT'.")
 
+# Crear instancia del bot
+bot = Bot(token=TOKEN)
+
 # Configuración del webhook inicial
 
 
