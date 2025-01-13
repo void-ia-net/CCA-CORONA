@@ -1,3 +1,4 @@
+from telegram import Bot
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import pytesseract
@@ -12,7 +13,30 @@ saldo = 0
 # ID user que acredita pagos
 USER_ID_RESTA = int(os.getenv("useresta"))
 
-# Conversion Tess
+# Validación de las variables de entorno
+TOKEN = os.getenv("tokenbot")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 8443))
+
+if not TOKEN:
+    raise ValueError("Falta configurar la variable de entorno 'tokenbot'.")
+
+if not WEBHOOK_URL or not WEBHOOK_URL.startswith("https://"):
+    raise ValueError("Falta configurar una URL HTTPS válida en 'WEBHOOK_URL'.")
+
+if not PORT:
+    raise ValueError("Falta configurar el puerto en 'PORT'.")
+
+# Configuración del webhook inicial
+bot = Bot(token=TOKEN)
+webhook_info = bot.get_webhook_info()
+if webhook_info.url != WEBHOOK_URL:
+    print("Configurando webhook...")
+    bot.set_webhook(url=WEBHOOK_URL)
+else:
+    print("El webhook ya está configurado correctamente.")
+
+# Conversión Tess
 
 
 def extract_amount_from_receipt(image_path, user_id):
@@ -30,7 +54,7 @@ def extract_amount_from_receipt(image_path, user_id):
     else:
         return None
 
-# Funcion texto
+# Función texto
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -52,8 +76,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         saldo += numero
         # Mostrar el saldo con formato adecuado
         saldo_mostrar = f"{saldo:,.2f}".replace(
-            ',', 'X').replace('.', ',').replace('X', '.'
-                                                )
+            ',', 'X').replace('.', ',').replace('X', '.')
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Saldo: $ {saldo_mostrar}"
@@ -71,20 +94,20 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     file = await photo.get_file()
 
     # Usar un directorio temporal adecuado
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
-        image_path = temp_file.name
-        await file.download_to_drive(image_path)
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+            image_path = temp_file.name
+            await file.download_to_drive(image_path)
 
-    amount = extract_amount_from_receipt(image_path, user_id)
-
-    # Eliminar el archivo temporal
-    os.remove(image_path)
+        amount = extract_amount_from_receipt(image_path, user_id)
+    finally:
+        if os.path.exists(image_path):
+            os.remove(image_path)
 
     if amount:
         saldo += amount
         saldo_mostrar = f"{saldo:,.2f}".replace(
-            ',', 'X').replace('.', ',').replace('X', '.'
-                                                )
+            ',', 'X').replace('.', ',').replace('X', '.')
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Saldo: $ {saldo_mostrar}"
@@ -101,8 +124,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def show_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global saldo
     saldo_mostrar = f"{saldo:,.2f}".replace(
-        ',', 'X').replace('.', ',').replace('X', '.'
-                                            )
+        ',', 'X').replace('.', ',').replace('X', '.')
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"Saldo: $ {saldo_mostrar}"
@@ -117,17 +139,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text="Listo para operar."
     )
 
-if __name__ == "__main__":
-    # Crea la aplicación con tu token del bot
-    TOKEN = os.getenv("tokenbot")
-    WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-    PORT = int(os.getenv("PORT", 8443))
+# Función para mostrar el estado del webhook
 
+
+async def webhook_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    webhook_info = context.bot.get_webhook_info()
+    await update.message.reply_text(
+        f"Webhook URL: {webhook_info.url}\nPending Updates: {webhook_info.pending_update_count}"
+    )
+
+# Manejo global de errores
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    print(f"Ocurrió un error: {context.error}")
+    if update:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Ha ocurrido un error, intenta de nuevo más tarde."
+        )
+
+if __name__ == "__main__":
     application = ApplicationBuilder().token(TOKEN).build()
 
     # Comandos
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("saldo", show_saldo))
+    application.add_handler(CommandHandler("webhook_status", webhook_status))
 
     # Manejador de mensajes de texto
     application.add_handler(MessageHandler(
@@ -136,6 +174,9 @@ if __name__ == "__main__":
     # Manejador de imágenes
     application.add_handler(MessageHandler(
         filters.PHOTO, handle_image))
+
+    # Manejador global de errores
+    application.add_error_handler(error_handler)
 
     # Inicia el bot con webhooks
     print("Bot en ejecución con webhooks...")
