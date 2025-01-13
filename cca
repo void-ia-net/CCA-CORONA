@@ -16,7 +16,7 @@ USER_ID_RESTA = int(os.getenv("useresta"))
 # Validación de las variables de entorno
 TOKEN = os.getenv("tokenbot")
 WEBHOOK_URL = os.getenv("webhook_url")
-PORT = int(os.getenv("PORT", 8443))
+PORT = int(os.getenv("port", 8443))
 
 if not TOKEN:
     raise ValueError("Falta configurar la variable de entorno 'tokenbot'.")
@@ -182,6 +182,6 @@ if __name__ == "__main__":
     print("Bot en ejecución con webhooks...")
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.getenv("webhook_url"))
+        port=int(os.getenv("port")),
         webhook_url=os.getenv("webhook_url")
     )
