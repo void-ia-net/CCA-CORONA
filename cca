@@ -7,6 +7,10 @@ import re
 import os
 import tempfile
 import asyncio
+import nest_asyncio
+
+# Aplicar nest_asyncio para evitar conflictos de bucles
+nest_asyncio.apply()
 
 # Variable global saldo
 saldo = 0
