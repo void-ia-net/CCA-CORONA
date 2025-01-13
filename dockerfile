@@ -9,6 +9,12 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt ./
 
+# Instala las dependencias del sistema, incluido Tesseract OCR
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    libtesseract-dev \
+    && apt-get clean
+
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
