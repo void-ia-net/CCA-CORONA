@@ -6,6 +6,7 @@ from PIL import Image
 import re
 import os
 import tempfile
+import asyncio
 
 # Variable global saldo
 saldo = 0
@@ -28,13 +29,15 @@ if not PORT:
     raise ValueError("Falta configurar el puerto en 'PORT'.")
 
 # Configuración del webhook inicial
-bot = Bot(token=TOKEN)
-webhook_info = bot.get_webhook_info()
-if webhook_info.url != WEBHOOK_URL:
-    print("Configurando webhook...")
-    bot.set_webhook(url=WEBHOOK_URL)
-else:
-    print("El webhook ya está configurado correctamente.")
+
+
+async def configure_webhook(bot, webhook_url):
+    webhook_info = await bot.get_webhook_info()  # Usa await aquí
+    if webhook_info.url != webhook_url:
+        print("Configurando webhook...")
+        await bot.set_webhook(url=webhook_url)
+    else:
+        print("El webhook ya está configurado correctamente.")
 
 # Conversión Tess
 
@@ -143,7 +146,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def webhook_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    webhook_info = context.bot.get_webhook_info()
+    webhook_info = await context.bot.get_webhook_info()
     await update.message.reply_text(
         f"Webhook URL: {webhook_info.url}\nPending Updates: {webhook_info.pending_update_count}"
     )
@@ -161,6 +164,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 if __name__ == "__main__":
     application = ApplicationBuilder().token(TOKEN).build()
+
+    # Configura el webhook antes de iniciar el bot
+    asyncio.run(configure_webhook(bot, WEBHOOK_URL))
 
     # Comandos
     application.add_handler(CommandHandler("start", start))
@@ -182,6 +188,6 @@ if __name__ == "__main__":
     print("Bot en ejecución con webhooks...")
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.getenv("port")),
-        webhook_url=os.getenv("webhook_url")
+        port=PORT,
+        webhook_url=WEBHOOK_URL
     )
