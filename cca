@@ -6,9 +6,6 @@ import re
 import os
 import tempfile
 
-# Ruta tess
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
 # Variable global saldo
 saldo = 0
 
