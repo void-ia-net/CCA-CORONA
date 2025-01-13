@@ -31,6 +31,17 @@ if not PORT:
 # Crear instancia del bot
 bot = Bot(token=TOKEN)
 
+# Configuración del webhook inicial
+
+
+async def configure_webhook(bot, webhook_url):
+    webhook_info = await bot.get_webhook_info()  # Usa await aquí
+    if webhook_info.url != webhook_url:
+        print("Configurando webhook...")
+        await bot.set_webhook(url=webhook_url)
+    else:
+        print("El webhook ya está configurado correctamente.")
+
 # Conversión Tess
 
 
@@ -138,7 +149,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def webhook_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    webhook_info = await context.bot.get_webhook_info()
+    webhook_info = await bot.get_webhook_info()
     await update.message.reply_text(
         f"Webhook URL: {webhook_info.url}\nPending Updates: {webhook_info.pending_update_count}"
     )
