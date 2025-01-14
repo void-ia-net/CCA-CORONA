@@ -1,13 +1,13 @@
+import nest_asyncio
+import asyncio
 from telegram import Bot
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 import re
 import os
-import tempfile
-import asyncio
-import nest_asyncio
+tempfile
 
 # Aplicar nest_asyncio para evitar conflictos de bucles
 nest_asyncio.apply()
@@ -49,12 +49,40 @@ async def configure_webhook(bot, webhook_url):
     else:
         print("El webhook ya está configurado correctamente.")
 
+# Preprocesamiento de imagen
+
+
+def preprocess_image(image_path):
+    # Abrir la imagen
+    image = Image.open(image_path)
+
+    # Convertir a escala de grises
+    image = image.convert("L")
+
+    # Mejorar contraste
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2.0)
+
+    # Aplicar un filtro para mejorar bordes
+    image = image.filter(ImageFilter.EDGE_ENHANCE)
+
+    # Guardar la imagen preprocesada temporalmente
+    preprocessed_path = image_path.replace(".jpg", "_preprocessed.jpg")
+    image.save(preprocessed_path)
+
+    return preprocessed_path
+
 # Conversión Tess
 
 
 def extract_amount_from_receipt(image_path, user_id):
     try:
-        text = pytesseract.image_to_string(Image.open(image_path), lang='eng')
+        # Preprocesar la imagen
+        preprocessed_path = preprocess_image(image_path)
+
+        # Realizar OCR en la imagen preprocesada
+        text = pytesseract.image_to_string(
+            Image.open(preprocessed_path), lang='spa')
         print(f"Texto extraído de la imagen: {text}")
 
         # Usar el patrón predefinido
@@ -96,7 +124,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         saldo += numero
         # Mostrar el saldo con formato adecuado
         saldo_mostrar = f"{saldo:,.2f}".replace(
-            ',', 'X').replace('.', ',').replace('X', '.')
+            ',', 'X').replace('.', ',').replace('X', '.'
+                                                )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Saldo: $ {saldo_mostrar}"
@@ -137,7 +166,8 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if amount is not None:
         saldo += amount
         saldo_mostrar = f"{saldo:,.2f}".replace(
-            ',', 'X').replace('.', ',').replace('X', '.')
+            ',', 'X').replace('.', ',').replace('X', '.'
+                                                )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Saldo: $ {saldo_mostrar}"
@@ -155,7 +185,8 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def show_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global saldo
     saldo_mostrar = f"{saldo:,.2f}".replace(
-        ',', 'X').replace('.', ',').replace('X', '.')
+        ',', 'X').replace('.', ',').replace('X', '.'
+                                            )
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"Saldo: $ {saldo_mostrar}"
