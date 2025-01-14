@@ -7,7 +7,7 @@ import pytesseract
 from PIL import Image, ImageFilter, ImageEnhance
 import re
 import os
-tempfile
+import tempfile
 
 # Aplicar nest_asyncio para evitar conflictos de bucles
 nest_asyncio.apply()
