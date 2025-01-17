@@ -18,6 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Verify Tesseract installation (for debugging)
+RUN tesseract --version
+
 # Install Python dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -32,4 +35,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
 # Run the application
-CMD ["python", "cca.py"]
+CMD ["python", "cca"]
