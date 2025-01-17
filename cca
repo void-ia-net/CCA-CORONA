@@ -1,10 +1,16 @@
+import nest_asyncio
+import asyncio
+from telegram import Bot
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 import re
 import os
 import tempfile
+
+# Aplicar nest_asyncio para evitar conflictos de bucles
+nest_asyncio.apply()
 
 # Variable global saldo
 saldo = 0
@@ -12,26 +18,91 @@ saldo = 0
 # ID user que acredita pagos
 USER_ID_RESTA = int(os.getenv("useresta"))
 
-# Conversion Tess
+# Validación de las variables de entorno
+TOKEN = os.getenv("tokenbot")
+WEBHOOK_URL = os.getenv("webhook_url")
+PORT = int(os.getenv("port", 8443))
+
+if not TOKEN:
+    raise ValueError("Falta configurar la variable de entorno 'tokenbot'.")
+
+if not WEBHOOK_URL or not WEBHOOK_URL.startswith("https://"):
+    raise ValueError("Falta configurar una URL HTTPS válida en 'WEBHOOK_URL'.")
+
+if not PORT:
+    raise ValueError("Falta configurar el puerto en 'PORT'.")
+
+# Crear instancia del bot
+bot = Bot(token=TOKEN)
+
+# Constante global para regex
+REGEX_AMOUNT = r'\$\s?([\d.,]+)'
+
+# Configuración del webhook inicial
+
+
+async def configure_webhook(bot, webhook_url):
+    webhook_info = await bot.get_webhook_info()
+    if webhook_info.url != webhook_url:
+        print("Configurando webhook...")
+        await bot.set_webhook(url=webhook_url)
+    else:
+        print("El webhook ya está configurado correctamente.")
+
+# Preprocesamiento de imagen
+
+
+def preprocess_image(image_path):
+    # Abrir la imagen
+    image = Image.open(image_path)
+
+    # Convertir a escala de grises
+    image = image.convert("L")
+
+    # Mejorar contraste
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2.0)
+
+    # Aplicar un filtro para mejorar bordes
+    image = image.filter(ImageFilter.EDGE_ENHANCE)
+
+    # Guardar la imagen preprocesada temporalmente
+    preprocessed_path = image_path.replace(".jpg", "_preprocessed.jpg")
+    image.save(preprocessed_path)
+
+    return preprocessed_path
+
+# Conversión Tess
 
 
 def extract_amount_from_receipt(image_path, user_id):
+    try:
+        # Preprocesar la imagen
+        preprocessed_path = preprocess_image(image_path)
 
-    text = pytesseract.image_to_string(Image.open(image_path), lang='eng')
+        # Realizar OCR en la imagen preprocesada
+        text = pytesseract.image_to_string(
+            Image.open(preprocessed_path), lang='spa')
+        print(f"Texto extraído de la imagen: {text}")
 
-    # regex importe
-    match = re.search(r'\$\s?([\d.,]+)', text)
-    if match:
-        # Replace commas with periods and convert to float
-        amount = float(match.group(1).replace('.', '').replace(',', '.'))
-        # Restar el importe si es del usuario que resta
-        if user_id == USER_ID_RESTA:
-            amount = -abs(amount)
-        return amount
-    else:
+        # Usar el patrón predefinido
+        match = re.search(REGEX_AMOUNT, text)
+        if match:
+            # Replace commas with periods and convert to float
+            amount = float(match.group(1).replace('.', '').replace(',', '.'))
+            # Restar el importe si es del usuario que resta
+            if user_id == USER_ID_RESTA:
+                amount = -abs(amount)
+            print(f"Importe extraído: {amount}")
+            return amount
+        else:
+            print("No se encontró un importe válido en el texto.")
+            return None
+    except Exception as e:
+        print(f"Error procesando la imagen: {e}")
         return None
 
-# Funcion texto
+# Función texto
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -53,7 +124,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         saldo += numero
         # Mostrar el saldo con formato adecuado
         saldo_mostrar = f"{saldo:,.2f}".replace(
-            ',', 'X').replace('.', ',').replace('X', '.')
+            ',', 'X').replace('.', ',').replace('X', '.'
+                                                )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Saldo: $ {saldo_mostrar}"
@@ -67,28 +139,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global saldo
     user_id = update.effective_user.id
-    photo = update.message.photo[-1]
-    file = await photo.get_file()
 
-    # Usar un directorio temporal adecuado
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
-        image_path = temp_file.name
-        await file.download_to_drive(image_path)
+    try:
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
 
-    amount = extract_amount_from_receipt(image_path, user_id)
+        # Usar un directorio temporal adecuado
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+            image_path = temp_file.name
+            await file.download_to_drive(image_path)
 
-    # Eliminar el archivo temporal
-    os.remove(image_path)
+        print(f"Imagen descargada en: {image_path}")
 
-    if amount:
+        amount = extract_amount_from_receipt(image_path, user_id)
+    except Exception as e:
+        print(f"Error manejando la imagen: {e}")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Ha ocurrido un error al procesar la imagen, intenta de nuevo más tarde."
+        )
+        return
+    finally:
+        if 'image_path' in locals() and os.path.exists(image_path):
+            os.remove(image_path)
+
+    if amount is not None:
         saldo += amount
         saldo_mostrar = f"{saldo:,.2f}".replace(
-            ',', 'X').replace('.', ',').replace('X', '.')
+            ',', 'X').replace('.', ',').replace('X', '.'
+                                                )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"Saldo: $ {saldo_mostrar}"
         )
     else:
+        print("No se encontró un importe en el comprobante.")
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text="No se encontró un importe válido en el comprobante."
@@ -100,7 +185,8 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def show_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global saldo
     saldo_mostrar = f"{saldo:,.2f}".replace(
-        ',', 'X').replace('.', ',').replace('X', '.')
+        ',', 'X').replace('.', ',').replace('X', '.'
+                                            )
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"Saldo: $ {saldo_mostrar}"
@@ -115,23 +201,56 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text="Listo para operar."
     )
 
+# Función para mostrar el estado del webhook
+
+
+async def webhook_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    webhook_info = await bot.get_webhook_info()
+    await update.message.reply_text(
+        f"Webhook URL: {webhook_info.url}\nPending Updates: {webhook_info.pending_update_count}"
+    )
+
+# Manejo global de errores
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    print(f"Ocurrió un error: {context.error}")
+    if update:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Ha ocurrido un error, intenta de nuevo más tarde."
+        )
+
 if __name__ == "__main__":
-    # Crea la aplicación con tu token del bot
-    application = ApplicationBuilder().token(
-        (os.getenv("tokenbot"))).build()
+    async def main():
+        # Configura el webhook antes de iniciar el bot
+        await configure_webhook(bot, WEBHOOK_URL)
 
-    # Comandos
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("saldo", show_saldo))
+        application = ApplicationBuilder().token(TOKEN).build()
 
-    # Manejador de mensajes de texto
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, handle_message))
+        # Comandos
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("saldo", show_saldo))
+        application.add_handler(CommandHandler(
+            "webhook_status", webhook_status))
 
-    # Manejador de imágenes
-    application.add_handler(MessageHandler(
-        filters.PHOTO, handle_image))
+        # Manejador de mensajes de texto
+        application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Inicia el bot
-    print("Bot en ejecución...")
-    application.run_polling()
+        # Manejador de imágenes
+        application.add_handler(MessageHandler(
+            filters.PHOTO, handle_image))
+
+        # Manejador global de errores
+        application.add_error_handler(error_handler)
+
+        # Inicia el bot con webhooks
+        print("Bot en ejecución con webhooks...")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            webhook_url=WEBHOOK_URL
+        )
+
+    asyncio.run(main())
