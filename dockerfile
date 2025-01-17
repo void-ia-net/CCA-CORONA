@@ -9,13 +9,16 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt ./
 
-# Instala las dependencias del sistema, incluido Tesseract OCR
-RUN apt-get update && apt-get install -y \
+# Install system dependencies, including Tesseract OCR and the Spanish language package
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
+    tesseract-ocr-spa \
     libtesseract-dev \
-    && apt-get clean
+    libjpeg-dev \
+    zlib1g-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install any needed packages specified in requirements.txt
+# Install Python dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
@@ -29,4 +32,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
 # Run the application
-CMD ["python", "your_script_name.py"]
+CMD ["python", "cca.py"]
