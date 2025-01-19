@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  bot:
+    build:
+      context: .
+    ports:
+      - "8443:8443"
+    environment:
+      - tokenbot=7217321621:AAGxM_YF39jRsKaPFF8lZeuPcrandeKT0Mc
+      - webhook_url=https://cca-corona.onrender.com
+      - port=8443
+      - useresta=961552024
+    volumes:
+      - .:/app
