@@ -187,10 +187,14 @@ if __name__ == "__main__":
         # Configurar webhook
         await bot.set_webhook(url=WEBHOOK_URL)
 
+        # Inicializar la aplicación
+        print("Inicializando la aplicación...")
+        await application.initialize()
+
         # Iniciar el bot
         print("Bot en ejecución con webhooks...")
         await application.start()
         await application.updater.start_polling()
-        await application.updater.idle()
+        await application.idle()
 
     asyncio.run(main())
